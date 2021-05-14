@@ -1,2 +1,2 @@
-# openchemomics
-An open-source Matlab toolbox for chemometric and metabolomic applications.
+# Open Chemomics
+An open-source Matlab toolbox for multivariate statistical analysis and data mining.
