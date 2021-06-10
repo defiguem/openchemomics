@@ -1,4 +1,4 @@
-function [res] = elliscatter2d(x, y, labels, alpha, ms, mkr)
+function [res] = elliscatter2d(x, y, labels, alpha, ms, mkr, filled)
 %
 % 2D-scatter plot of values in x and y, colored by labels.
 % Adds confidence ellipse based on reference below.
@@ -16,6 +16,7 @@ function [res] = elliscatter2d(x, y, labels, alpha, ms, mkr)
 % alpha : confidence interval as float between 0 and 1, default is 0.95
 % ms : marker size
 % mkr : marker type
+% filled : whether markers should be filled (1) or not (0) 
 %
 % Output arguments :
 % ==================
@@ -32,6 +33,7 @@ function [res] = elliscatter2d(x, y, labels, alpha, ms, mkr)
 %
 % Modifications:
 % ==============
+% 2021.06.10 : uses the matlab plot function, not scatter anymore
 %
 % =========================================================================
 
@@ -105,7 +107,15 @@ for i = 1 : length(res.labels)
     ev = diag(sqrt(F*evals));
     exy = [cos(coord),sin(coord)]*ev*P' + repmat(centroid,npoints,1);
     
-    res.handles{i} = scatter(x(res.classvec == i), y(res.classvec == i), ms, res.colmat(res.classvec == i,:), 'filled', mkr{i});
+    idx = find(res.classvec == i);
+    
+    if filled == 1
+        res.handles{i} = plot(x(idx), y(idx), 'Color', res.colmat(idx(1),:), 'MarkerFaceColor', res.colmat(idx(1),:), 'Marker', mkr{i}, 'MarkerSize', ms, 'LineStyle','None');
+        hold on;
+    else
+        res.handles{i} = plot(x(idx), y(idx), 'Color', res.colmat(idx(1),:), 'Marker', mkr{i}, 'MarkerSize', ms, 'LineStyle','None');
+    end
+    
     line(exy(:,1),exy(:,2),'color',res.labelscol(i,:),'LineWidth', 2); % adds ellipse to plot
     
 end
