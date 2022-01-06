@@ -90,7 +90,7 @@ function [asca_res] = asca(X, Y, Options)
 %   asca_res.evals : eigenvalues of SCA for ANOVA matrices without adding  
 %       pure error and performing SCA
 %   asca_res.varexp : explained variance of SCA for ANOVA matrices without 
-%       adding   pure error and performing SCA
+%       adding pure error and performing SCA
 %   asca_res.Options : options used to perform ASCA
 %
 %   if Options.permtest == 1 :
@@ -141,7 +141,7 @@ function [asca_res] = asca(X, Y, Options)
 %
 % RASCA : Resampled ASCA classical ANOVA decomposition
 % Options.decomp = 'res_classical';
-% Options.nres = 100; % number of resamplings to perform
+% Options.rsmethod = 'wavg';
 % Options.interactions = 2;
 % Options.permtest = 1;
 % Options.nperms = 1000;
