@@ -287,23 +287,28 @@ switch Options.decomp
             
         end
         
-        % Creates empty B (it is just useful for later calculations...)
+        % Calculates the model parameters in B
+        codcat = cat(2,cod{:});
+        Bmat = (pinv(codcat' * codcat) * codcat' * X)';
+        
+        % Creates empty B and separates Bmat in array of cells (it is just useful for later calculations...)
         bempty = {};
+        B = {};
         for i = 1 : length(cod)
+            B{i} = Bmat(:,size(cat(2,cod{1:i-1}),2) + 1 : size(cat(2,cod{1:i}),2));
             bempty{i} = zeros(p,size(cod{i},2));
         end
         
+        % Stores the parameters B
+        adecomp_res.B = B;
+        
         % Grand mean matrix : initialization of decomposition into GLM matrices
-        B = bempty;
-        B{1} = (pinv(cod{1}' * cod{1}) * cod{1}' * X)';
         Xf = codempty;
         Xf{1} = cod{1};
+        Bf = bempty;
+        Bf{1} = B{1};
         
-        % Stores the parameters B
-        adecomp_res.B = bempty;
-        adecomp_res.B{1} = B{1};
-        
-        adecomp_res.avgmat{1,1} = cat(2,Xf{:}) * cat(2,B{:})'; % grand mean matrix 
+        adecomp_res.avgmat{1,1} = cat(2,Xf{:}) * cat(2,Bf{:})'; % grand mean matrix 
         
         adecomp_res.anovamat{1,2} = X - adecomp_res.avgmat{1,1}; % centered X
         adecomp_res.matid{1,1} = 'Mean'; % grand mean matrix as index 1
@@ -319,21 +324,17 @@ switch Options.decomp
             
             % Stores factor/levels
             adecomp_res.Ys{1,i} = Y(:,i); 
-
-            % Copies the empty B array of cells and calculates the 
-            % parameters matrix for factor i
-            B = bempty;
-            B{i+1} = (pinv(cod{i+1}' * cod{i+1}) * cod{i+1}' * X)';
-            adecomp_res.B{i+1} = B{i+1};
             
             % Copies the empty array of cells for the design matrices
             % and adds the design matrix of factor i in Xf, the rest
             % are zeros
             Xf = codempty;
             Xf{i+1} = cod{i+1};
+            Bf = bempty;
+            Bf{i+1} = B{i+1};
             
             % Calculates the effect matrix of factor i 
-            adecomp_res.avgmat{1,i+1} = cat(2,Xf{:}) * cat(2,B{:})';
+            adecomp_res.avgmat{1,i+1} = cat(2,Xf{:}) * cat(2,Bf{:})';
             
             % Successively removes the effect matrices calculated
             adecomp_res.anovamat{1,i+2} = adecomp_res.anovamat{1,i+1} - adecomp_res.avgmat{1,i+1};
@@ -366,20 +367,16 @@ switch Options.decomp
                 adecomp_res.Ys{1,i+q} = Y(:,combs{i});
                 Ycomb = cellstr(num2str(adecomp_res.Ys{1,i+q}));
                 
-                % Copies the empty B array of cells and calculates the 
-                % parameters matrix
-                B = bempty;
-                B{tab} = (pinv(cod{tab}' * cod{tab}) * cod{tab}' * X)';
-                adecomp_res.B{tab} = B{tab};
-                
                 % Copies the empty array of cells for the design matrices
                 % and adds the design matrix of the interaction in
                 % combs{i} in Xf, the rest are zeros
                 Xf = codempty;
                 Xf{tab} = cod{tab};
+                Bf = bempty;
+                Bf{tab} = B{tab};
                 
                 % Calculates the effect matrix of the interaction in combs{i}
-                adecomp_res.avgmat{1,tab} = cat(2,Xf{:}) * cat(2,B{:})';
+                adecomp_res.avgmat{1,tab} = cat(2,Xf{:}) * cat(2,Bf{:})';
                 
                 % Successively removes the effect matrices calculated
                 adecomp_res.anovamat{1,tab+1} = adecomp_res.anovamat{1,tab} - adecomp_res.avgmat{1,tab};
@@ -395,6 +392,9 @@ switch Options.decomp
                 
             end
         end
+        
+        % Calculates the residuals
+        adecomp_res.anovamat{1,end} = adecomp_res.anovamat{1,1} - (cat(2,cod{:}) * Bmat'); 
         
 end
 
@@ -432,18 +432,5 @@ for i = 1 : length(adecomp_res.Ys)
     end
 
 end
-
-% Calculation of the type III sum of squares
-% and percentage of explained variance of the effects
-% for i = 1 : ntab
-%     
-%     if i ~= ntab
-%         Ef = (adecomp_res.anovamat{end} + adecomp_res.avgmat{i+1}).^2;
-%         adecomp_res.ssqvarexp{2,i} = (sum(Ef(:)) - adecomp_res.ssq{1,end}) / (adecomp_res.ssq{1,1}-adecomp_res.ssq{1,2}) * 100;
-%     else
-%         adecomp_res.ssqvarexp{2,i} = adecomp_res.ssq{1,end} / (adecomp_res.ssq{1,1}-adecomp_res.ssq{1,2}) * 100;
-%     end
-%     
-% end
 
 end
