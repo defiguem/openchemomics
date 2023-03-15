@@ -206,7 +206,7 @@ end
 % Copies fields of adecomp structure to the asca_res structure
 fieldn = fieldnames(adecomp_res)';
 for fn = fieldn(1:end-1) % without options
-   amopls_res.(fn{1}) = adecomp_res.(fn{1});
+    amopls_res.(fn{1}) = adecomp_res.(fn{1});
 end
 
 %% Performs OPLS on the original design for each number of orthogonal components
@@ -241,7 +241,7 @@ if length(Options.noc) > 1
                 clc; fprintf('Performing permutations test, please wait...\n Effect : %d / %d \n Orthogonal component : %d / %d \n Iteration : %d / %d \n', i, size(Y,2) + 1, j, length(Options.noc), k, Options.nperms);
 
                 % Calculates the effect matrices based on permutations
-                [perm_res] = amopls_perm(amopls_res(1).Xprepro.data, Y, i, Options);
+                [perm_res] = amopls_perm(adecomp_res, i, Options);
 
                 % Calculates the association matrices
                 [Wstmp, Ycat] = association_matrices(perm_res);
@@ -315,7 +315,7 @@ end
 amopls_res.varexp = zeros(1, size(amopls_res.scores,2));
 sstot_K = (sum(diag(amopls_res.kopls.K{1,1})));
 for i = 1 : size(amopls_res.scores,2)
-    rss = sum(diag( amopls_res.kopls.K{1,1} - (amopls_res.scores(:,i) * amopls_res.scores(:,i)') ));    
+    rss = sum(diag( amopls_res.kopls.K{1,1} - (amopls_res.scores(:,i) * amopls_res.scores(:,i)') ));
     amopls_res.varexp(i) = (1 - rss/sstot_K) * 100;
 end
 
@@ -354,12 +354,16 @@ if strcmp(Options.decomp,'rebalanced') == 1
     % Calculates the concatenated rebalanced scores and orthogonal scores
     [kopls_pred] = koplsPredict(sum(cat(3,Wtetr{:}),3),sum(cat(3,Wsp{:}),3),sum(cat(3,Ws{:}),3),amopls_res.kopls,nOC,0);
     amopls_res.scores = [kopls_pred.Tp{end},cat(2,kopls_pred.to{:})];
-
+    amopls_res.kopls.adecomp = adecomp_res;
 end
 
 warning('on','all');
 
 amopls_res.Options = Options; % stores options used
+
+if strcmp(Options.decomp,'rebalanced') == 1
+    amopls_res.Options.Xbal = adecomp_res.X;
+end
 
 %% Performs permutation tests if asked to in Options.permtest
 
@@ -383,7 +387,7 @@ function [Ws, Ycat, neff] = association_matrices(adecomp_res)
 n = size(adecomp_res.X,1);
 
 % Number of effects (including residuals)
-neff = length(adecomp_res.effects); 
+neff = length(adecomp_res.effects);
 
 % Allocates space for the association matrices
 Ws = cell(1,neff);
@@ -407,7 +411,7 @@ for i = 1 : neff+1
 
         % Stores and normalizes to unit variance the association matrices
         Ws{i} = ( adecomp_res.Xfaug{i} * adecomp_res.Xfaug{i}' );
-        
+
     else % residuals
 
         Ws{i} = ( adecomp_res.Xe * adecomp_res.Xe' );
@@ -488,7 +492,11 @@ end
 
 % Inner function to perform permutations of specific effects.
 % Used for significance testing and nOCs optimization.
-function [adecomp_res] = amopls_perm(X, Y, effect, Options)
+function [adecomp_res] = amopls_perm(adecomp_res, effect, Options)
+
+% Extracts the design matrices and the inital data
+Y = adecomp_res.Y; % design matrix
+X = adecomp_res.X; % experimental data
 
 [n,p] = size(X); % size of X
 [~,q] = size(Y); % size of Y
@@ -496,26 +504,8 @@ function [adecomp_res] = amopls_perm(X, Y, effect, Options)
 % Creates a copy of the design
 Yvo = Y;
 
-% Stores the design matrices and the inital data
-adecomp_res.Y = Y; % design matrix
-adecomp_res.X = X; % experimental data
-
-% Allocates fields in the output structure
-adecomp_res.Xm = {}; % grand mean matrix
-adecomp_res.Xf = {}; % pure effect matrices
-adecomp_res.Xe = {}; % error matrix of residuals
-adecomp_res.Ef = {}; % residuals of a model without effect f
-adecomp_res.ssq = []; % effect sum of squares
-adecomp_res.ssqvarexp = []; % explained variation of sum of squares
-adecomp_res.Xfaug = {}; % augmented effect matrices
-
-
-% Defines the list of effects to include in the model
-effects = {};
-for i = 1 : Options.interactions
-    effects = [effects; num2cell(nchoosek(1:q, i),2)];
-end
-
+% Extracts the list of effects to include in the model
+effects = adecomp_res.effects;
 adecomp_res.effects = effects'; % stores the effect identifiers
 
 % Switches cases depending on the multivariate ANOVA decomposition method
@@ -523,139 +513,21 @@ switch Options.decomp
 
     case 'classical'
 
-        if effect <= q
-            effects = effects(1:q);
-            adecomp_res.effects = effects;
-        end
-
-        adecomp_res.Xm = repmat(mean(X,1), n,1); % grand mean matrix
-
-        % Loops over the effects
-        for i = 1 : length(effects)
-
-            Y = Yvo; % extracts true design matrix
-
-            if length(effects{i}) == 1 % main effects
-
-                % Permutes only one main effect at a time if the effect input parameters
-                % relates to one of the main factors
-                if effect == effects{i}
-                    Yo = Y(:,1:end ~= effects{i}); % design matrix of other factors than effect
-                    Youni = unique(Yo,'rows'); % unique combinations of other factors
-
-                    % Creates randomized design matrix for factor effect without
-                    % affecting the other factors
-                    for j = 1 : size(Youni)
-                        idx = find( ismember(Yo,Youni(j,:),'rows') == 1 ); % finds position of each unique combination of other factors
-                        perms  = randperm(length(idx)); % creates randomized indices for the length of idx
-                        Y(idx,effects{i}) = Y(idx(perms),effects{i}); % randomizes the design for factor effect
-                    end
-                end
-
-                % Stores unique levels for factor Y(:,i)
-                levels = unique(Y(:,effects{i}));
-
-                % Calculates pure effects for each level j of factor i
-                adecomp_res.Xf{1,i} = zeros(n,p);
-
-                % Loops over the levels of a given factor
-                for j = 1 : length(levels)
-                    idx = find(Y(:,effects{i}) == levels(j)); % indices of observations at factor i and level j
-                    levmean = mean(X(idx,:),1); % mean of observations of factor i at level j
-                    adecomp_res.Xf{1,i}(idx,:) = repmat(levmean, length(idx),1); % replicates the mean vector in the effect matrix
-                end
-
-                % Removes the grand mean from the effect matrix it is
-                % calculated based on the initial X matrix
-                adecomp_res.Xf{1,i} = adecomp_res.Xf{1,i} - adecomp_res.Xm;
-
-            else % interactions
-
-                if effect > q
-                    % For interactions, the whole matrix is randomized
-                    perms = randperm(n); % random permutations
-                    Y = Yvo(perms,:); % randomizes levels assignment
-                end
-
-                % Combination of factors (interactions)
-                Ycomb = cellstr(num2str(Y(:,effects{i})));
-
-                % Unique combinations of levels in factors
-                uni = unique(Ycomb);
-
-                % Calculates pure effects for each combination of levels
-                adecomp_res.Xf{1,i} = zeros(n,p);
-
-                % Loops over combinations of levels in factors
-                for j = 1 : length(uni)
-                    idx = find(strcmp(Ycomb, uni{j}) == 1); % indices of observations of factors combs{i} at levels uni{j}
-                    levmean = mean(X(idx,:),1); % mean of observations of factors combs{i} at levels uni{j}
-                    adecomp_res.Xf{1,i}(idx,:) = repmat(levmean, length(idx),1); % replicates the mean vector in the effect matrix
-                end
-
-                % Identifies all factors and interactions involved in the
-                % evaluation of the interaction combs{i} that are  lower
-                % than length of combs{i}
-                combs = {};
-                for j = 1 : length(effects{i})-1
-                    combs = [combs; num2cell(nchoosek(effects{i}, j),2)];
-                end
-
-                % Identifies the position of the above effects in order to
-                % remove them below
-                idx = [];
-                for j = 1 : size(combs,1)
-                    idx = [idx; find(cell2mat(cellfun(@(x) isequal(x,combs{j}),effects,'UniformOutput',false)) == 1)];
-                end
-
-                % Removes all the effect matrices identified in combs
-                % according to their position defined in idx.
-                % Note that the interaction term is calculated based on the
-                % initial matrix X, then we remove the above identified
-                % effect matrices + the grand mean.
-                adecomp_res.Xf{1,i} = adecomp_res.Xf{1,i} - adecomp_res.Xm - sum(cat(3,adecomp_res.Xf{1,idx}),3);
-
-            end
-        end
-
-        % Calculates the residuals
-        adecomp_res.Xe = adecomp_res.X - adecomp_res.Xm - sum(cat(3,adecomp_res.Xf{:}),3);
-
-        % Calculates the sum of square and explained variation of the effects + residuals
-        neff = length(adecomp_res.Xf); % number of effects
-        for i = 1 : neff + 1
-
-            if i < neff + 1
-
-                % Sum-of-squares
-                adecomp_res.ssq(1,i) = sum(adecomp_res.Xf{1,i}(:).^2);
-
-                % Explained variation
-                adecomp_res.ssqvarexp(1,i) = adecomp_res.ssq(1,i) / ( sum(adecomp_res.X(:).^2) - sum(adecomp_res.Xm(:).^2) ) * 100;
-
-            else
-
-                % Sum-of-squares
-                adecomp_res.ssq(1,i) = sum(adecomp_res.Xe(:).^2);
-
-                % Explained variation
-                adecomp_res.ssqvarexp(1,i) = adecomp_res.ssq(1,i) / ( sum(adecomp_res.X(:).^2) - sum(adecomp_res.Xm(:).^2) ) * 100;
-
-            end
-
-        end
-
-        % Removes the Ef field because not used in classical adecomp
-        adecomp_res = rmfield(adecomp_res,'Ef');
-
-    case {'glm','rebalanced'}
-
         Y = Yvo; % extracts true design matrix
 
-        % Permutes only one main effect at a time if the effect input parameters
-        % relates to one of the main factors
-        if effect <= size(Y,2)
-            Yo = Y(:,1:end ~= effect); % design matrix of other factors than effect
+        if effect <= q % main effects
+
+            % Reduces only to main effects
+            effects = effects(1:q);
+            adecomp_res.effects = effects;
+            adecomp_res.Xf = adecomp_res.Xf(1:q);
+            adecomp_res.Xfaug = adecomp_res.Xfaug(1:q);
+            adecomp_res.ssq = adecomp_res.ssq(1:q);
+            adecomp_res.ssqvarexp = adecomp_res.ssqvarexp(1:q);
+
+            % Permutes only one main effect at a time if the effect input parameters
+            % relates to one of the main factors
+            Yo = Y(:,1:end ~= effects{effect}); % design matrix of other factors than effect
             Youni = unique(Yo,'rows'); % unique combinations of other factors
 
             % Creates randomized design matrix for factor effect without
@@ -663,110 +535,212 @@ switch Options.decomp
             for j = 1 : size(Youni)
                 idx = find( ismember(Yo,Youni(j,:),'rows') == 1 ); % finds position of each unique combination of other factors
                 perms  = randperm(length(idx)); % creates randomized indices for the length of idx
-                Y(idx,effect) = Y(idx(perms),effect); % randomizes the design for factor effect
+                Y(idx,effects{effect}) = Y(idx(perms),effects{effect}); % randomizes the design for factor effect
             end
-        end
 
-        % Checks which coding is to be used to define the design matrices
-        if strcmp(Options.coding,'sumcod') == 1
+            % Stores unique levels for factor Y(:,i)
+            levels = unique(Y(:,effects{effect}));
 
-            % Sum coding of the input design matrix according to
-            % Thiel et al. (2017)
-            [cod, codempty] = sumcoding(Y, Options);
-            adecomp_res.sumcod = cod;
+            % Loops over the levels of a given factor
+            for j = 1 : length(levels)
+                idx = find(Y(:,effects{effect}) == levels(j)); % indices of observations at factor i and level j
+                levmean = mean(X(idx,:),1); % mean of observations of factor i at level j
+                adecomp_res.Xf{1,effect}(idx,:) = repmat(levmean, length(idx),1); % replicates the mean vector in the effect matrix
+            end
 
-        elseif strcmp(Options.coding,'wecod') == 1
+            % Removes the grand mean from the effect matrix it is
+            % calculated based on the initial X matrix
+            adecomp_res.Xf{1,effect} = adecomp_res.Xf{1,effect} - adecomp_res.Xm;
 
-            % Weighted-effect coding of the input design matrix according
-            % to Nieuwenhuis et al. (2017)
-            [cod, codempty] = wecoding(Y, Options);
-            adecomp_res.wecod = cod;
+        else % interactions
 
-        end
-
-        if effect <= size(Y,2)
-            effects = effects(1:q);
-            adecomp_res.effects = effects;
-            cod = cod(1:q+1);
-            codempty = codempty(1:q+1);
-        else
             % For interactions, the whole matrix is randomized
             perms = randperm(n); % random permutations
-            for i = size(Y,2)+2 : size(cod,2) % considers that intercept is in first cell
-                cod{i} = cod{i}(perms,:);
+            Y = Yvo(perms,:); % randomizes levels assignment
+
+            % Combination of factors (interactions)
+            Ycomb = cellstr(num2str(Y(:,effects{effect})));
+
+            % Unique combinations of levels in factors
+            uni = unique(Ycomb);
+
+            % Identifies all factors and interactions involved in the
+            % evaluation of the interaction combs{i} that are  lower
+            % than length of combs{i}
+            combs = {};
+            for j = 1 : length(effects{effect})-1
+                combs = [combs; num2cell(nchoosek(effects{effect}, j),2)];
             end
-        end
 
-        % Calculates the model parameters in B
-        codcat = cat(2,cod{:});
-        Bmat = (pinv(codcat' * codcat) * codcat' * X)';
+            % Identifies the position of the above effects in order to
+            % remove them below
+            idx = [];
+            for j = 1 : size(combs,1)
+                idx = [idx; find(cell2mat(cellfun(@(x) isequal(x,combs{j}),effects,'UniformOutput',false)) == 1)];
+            end
 
-        % Creates empty B and separates Bmat in array of cells (it is just useful for later calculations...)
-        bempty = {};
-        B = {};
-        for i = 1 : length(cod)
-            B{i} = Bmat(:,size(cat(2,cod{1:i-1}),2) + 1 : size(cat(2,cod{1:i}),2));
-            bempty{i} = zeros(p,size(cod{i},2));
-        end
+            % Removes all the effect matrices identified in combs
+            % according to their position defined in idx.
+            % Note that the interaction term is calculated based on the
+            % initial matrix X, then we remove the above identified
+            % effect matrices + the grand mean.
+            Xred = adecomp_res.X - adecomp_res.Xm - sum(cat(3,adecomp_res.Xf{1,idx}),3);
 
-        % Stores the parameters B
-        adecomp_res.B = B;
-
-        % Calculates full model Residuals
-        adecomp_res.Xe = X - (cat(2,cod{:}) * Bmat');
-
-        % Calculation of the main factor effects :
-        for i = 1 : length(cod) % all main effects and interactions
-
-            % Calculates the effect matrices
-            Xf = codempty; Xf{i} = cod{i};
-            Bf = bempty; Bf{i} = B{i};
-
-            if i == 1 % grand mean matrix
-
-                adecomp_res.Xm = cat(2,Xf{:}) * cat(2,Bf{:})';
-            else
-                 % effects
-
-                % Stores pure effect matrix
-                adecomp_res.Xf{1,i-1} = cat(2,Xf{:}) * cat(2,Bf{:})';
-
-
-                % Calculates the residuals of the model with effect i
-                Xf = cod; Xf{i} = zeros(size(cod{i}));
-                Bf = B; Bf{i} = zeros(size(B{i}));
-                adecomp_res.Ef{1,i-1} = X - (cat(2,Xf{:}) * cat(2,Bf{:})');
-
+            % Loops over combinations of levels in factors
+            for j = 1 : length(uni)
+                idx = find(strcmp(Ycomb, uni{j}) == 1); % indices of observations of factors combs{i} at levels uni{j}
+                levmean = mean(Xred(idx,:),1); % mean of observations of factors combs{i} at levels uni{j}
+                adecomp_res.Xf{1,effect}(idx,:) = repmat(levmean, length(idx),1); % replicates the mean vector in the effect matrix
             end
 
         end
 
-        % Sum of squares and explained variance 
-        neff = length(cod)-1;
-        den = sum(cat(3,adecomp_res.Ef{1:neff}).^2,'all') - (neff-1) * sum(adecomp_res.Xe(:).^2);
-        for i = 1 : neff + 1
+        % Calculates the residuals
+        adecomp_res.Xe = adecomp_res.X - adecomp_res.Xm - sum(cat(3,adecomp_res.Xf{:}),3);
 
-            if i < neff + 1 % effects
+    case 'glm'
 
-                % Sum of squares
-                adecomp_res.ssq(1,i) = sum(adecomp_res.Ef{i}(:).^2) - sum(adecomp_res.Xe(:).^2);
+        Y = Yvo; % extracts true design matrix
 
-                % Explained variance (row 1 does not sum to 100%, row 2 sums to 100%)
-                adecomp_res.ssqvarexp(1,i) = adecomp_res.ssq(1,i) / ( sum((X-adecomp_res.Xm).^2,'all') ) * 100;
-                adecomp_res.ssqvarexp(2,i) = adecomp_res.ssq(1,i) / ( den ) * 100;
+        X = adecomp_res.X; % experimental data
 
-            else % residuals
+        if effect <= q % main effects
 
-                % Sum of squares
-                adecomp_res.ssq(1,i) = sum(adecomp_res.Xe(:).^2);
+            Yo = Y(:,1:end ~= effect); % design matrix of other factors than i
+            Youni = unique(Yo,'rows'); % unique combinations of other factors
 
-                % Explained variance (row 1 does not sum to 100%, row 2 sums to 100%)
-                adecomp_res.ssqvarexp(1,i) = sum(adecomp_res.Xe(:).^2) / ( sum((X-adecomp_res.Xm).^2,'all') ) * 100;
-                adecomp_res.ssqvarexp(2,i) = sum(adecomp_res.Xe(:).^2) / ( den ) * 100;
-
+            % Creates randomized design matrix for factor i without
+            % affecting the other factors
+            for j = 1 : size(Youni)
+                idx = find( ismember(Yo,Youni(j,:),'rows') == 1 ); % finds position of each unique combination of other factors
+                perms  = randperm(length(idx)); % creates randomized indices for the length of idx
+                Y(idx,:) = Y(idx(perms),:); % performs the permutations here
             end
 
+            % Rebalances the design
+            [adecomp_res] = radecomp(X, Y, Options); % see radecomp.m for information
+
+            % Reduces only to main effects
+            effects = effects(1:q);
+            adecomp_res.effects = effects;
+            adecomp_res.Xf = adecomp_res.Xf(1:q);
+            adecomp_res.Xfaug = adecomp_res.Xfaug(1:q);
+            adecomp_res.ssq = adecomp_res.ssq(1:q);
+            adecomp_res.ssqvarexp = adecomp_res.ssqvarexp(1:q);
+
+        else
+
+            % For interactions, the whole matrix is randomized
+            perms = randperm(n); % random permutations
+            Y = Yvo(perms,:); % randomizes levels assignment
+
+            % Rebalances the design
+            [adecomp_res] = radecomp(X, Y, Options); % see radecomp.m for information
+
         end
+
+        Ys = adecomp_res.Y(:,adecomp_res.effects{effect});
+
+        Ysm{1,1} = unique(Ys,'rows');
+
+        for j = 1 : size(Ysm{1},1)
+
+            [~,idx] = ismember(Ys,Ysm{1}(j,:), 'rows');
+            Ysm{1,2}(j,:) = mean(adecomp_res.Xf{effect}(idx == 1, :),1);
+
+        end
+
+        for j = 1 : size(Ysm{1},1)
+            idx = ismember(Y(:, unique(adecomp_res.effects{effect})), Ysm{1}(j,:),'rows');
+            adecomp_res.Xf{effect}(idx,:) = repmat(Ysm{2}(j,:),[sum(idx==1),1]);
+        end
+
+        % Calculates the residuals
+        adecomp_res.Xe = adecomp_res.X - adecomp_res.Xm - sum(cat(3,adecomp_res.Xf{:}),3);
+
+    case 'rebalanced'
+
+        Y = Yvo; % extracts true design matrix
+
+        if effect <= q % main effects
+
+            % Permutes only one main effect at a time if the effect input parameters
+            % relates to one of the main factors
+            Yo = Y(:,1:end ~= effects{effect}); % design matrix of other factors than effect
+            Youni = unique(Yo,'rows'); % unique combinations of other factors
+
+            % Creates randomized design matrix for factor effect without
+            % affecting the other factors
+            for j = 1 : size(Youni)
+                idx = find( ismember(Yo,Youni(j,:),'rows') == 1 ); % finds position of each unique combination of other factors
+                perms  = randperm(length(idx)); % creates randomized indices for the length of idx
+                Y(idx,effects{effect}) = Y(idx(perms),effects{effect}); % randomizes the design for factor effect
+            end
+
+            % Rebalances the design
+            [adecomp_res] = radecomp(X, Y, Options); % see radecomp.m for information
+
+            % Reduces only to main effects
+            effects = effects(1:q);
+            adecomp_res.effects = effects;
+            adecomp_res.Xf = adecomp_res.Xf(1:q);
+            adecomp_res.Xfaug = adecomp_res.Xfaug(1:q);
+            adecomp_res.ssq = adecomp_res.ssq(1:q);
+            adecomp_res.ssqvarexp = adecomp_res.ssqvarexp(1:q);
+
+        else % interactions
+
+            % For interactions, the whole matrix is randomized
+            perms = randperm(n); % random permutations
+            Y = Yvo(perms,:); % randomizes levels assignment
+
+            % Rebalances the design
+            [adecomp_res] = radecomp(X, Y, Options); % see radecomp.m for information
+
+        end
+
+        Ys = adecomp_res.Y(:,adecomp_res.effects{effect});
+
+        Ysm{1,1} = unique(Ys,'rows');
+
+        for j = 1 : size(Ysm{1},1)
+
+            [~,idx] = ismember(Ys,Ysm{1}(j,:), 'rows');
+            Ysm{1,2}(j,:) = mean(adecomp_res.Xf{effect}(idx == 1, :),1);
+
+        end
+
+        for j = 1 : size(Ysm{1},1)
+            idx = ismember(Y(:, unique(adecomp_res.effects{effect})), Ysm{1}(j,:),'rows');
+            adecomp_res.Xf{effect}(idx,:) = repmat(Ysm{2}(j,:),[sum(idx==1),1]);
+        end
+
+        % Calculates the residuals
+        adecomp_res.Xe = adecomp_res.X - adecomp_res.Xm - sum(cat(3,adecomp_res.Xf{:}),3);
+
+end
+
+% Calculates the sum of square and explained variation of the effects + residuals
+neff = length(adecomp_res.Xf); % number of effects
+for i = 1 : neff + 1
+
+    if i < neff + 1
+
+        % Sum-of-squares
+        adecomp_res.ssq(1,i) = sum(adecomp_res.Xf{1,i}(:).^2);
+
+        % Explained variation
+        adecomp_res.ssqvarexp(1,i) = adecomp_res.ssq(1,i) / ( sum(adecomp_res.X(:).^2) - sum(adecomp_res.Xm(:).^2) ) * 100;
+
+    else
+
+        % Sum-of-squares
+        adecomp_res.ssq(1,i) = sum(adecomp_res.Xe(:).^2);
+
+        % Explained variation
+        adecomp_res.ssqvarexp(1,i) = adecomp_res.ssq(1,i) / ( sum(adecomp_res.X(:).^2) - sum(adecomp_res.Xm(:).^2) ) * 100;
+
+    end
 
 end
 
