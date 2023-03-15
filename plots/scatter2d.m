@@ -22,6 +22,7 @@ function [res] = scatter2d(x, y, labels, ms, mkr, filled, convexhull)
 % ms = 30;
 % mkr = 'o';
 % filled = 1;
+% convexhull = 1;
 % scatter2d(x, y, labels, ms, mkr, filled, convexhull);
 %
 % Related functions :
@@ -36,8 +37,8 @@ function [res] = scatter2d(x, y, labels, ms, mkr, filled, convexhull)
 % Modifications:
 % ==============
 % 2021.05.20 : added convex hulls drawing option in input argument;
-% 2021.06.01 : uses the matlab plot function, not scatter anymore
-%
+% 2021.06.01 : uses the matlab plot function, not scatter anymore;
+% 2023.03.15 : reintroduced scatter function;
 % =========================================================================
 
 %% Fail-safe section
@@ -86,7 +87,10 @@ for i = 1 : length(res.labels)
     idx = find(res.classvec == i);
     
     if filled == 1
-        res.handles{i} = plot(x(idx), y(idx), 'Color', res.colmat(idx(1),:), 'MarkerFaceColor', res.colmat(idx(1),:), 'Marker', mkr{i}, 'MarkerSize', ms, 'LineStyle','None');
+        %res.handles{i} = plot(x(idx), y(idx), 'Color', res.colmat(idx(1),:), 'MarkerFaceColor', res.colmat(idx(1),:), 'Marker', mkr{i}, 'MarkerSize', ms, 'LineStyle','None');
+        res.handles{i} = scatter(x(idx), y(idx), ms, mkr{i},'MarkerFaceColor',res.colmat(idx(1),:),'MarkerEdgeColor',res.colmat(idx(1),:),'LineWidth',1);
+        res.handles{i}.MarkerFaceAlpha = .3;
+        res.handles{i}.LineWidth = 1.2;
         hold on;
     else
         res.handles{i} = plot(x(idx), y(idx), 'Color', res.colmat(idx(1),:), 'Marker', mkr{i}, 'MarkerSize', ms, 'LineStyle','None');
@@ -94,7 +98,9 @@ for i = 1 : length(res.labels)
     
     if convexhull == 1
         k = convhull(x(idx), y(idx));
-        plot(x(idx(k)), y(idx(k)),':','Color',res.colmat(idx(1),:),'linewidth',2);
+        ch = plot(x(idx(k)), y(idx(k)),':','Color',res.colmat(idx(1),:),'linewidth',2);
+        ch.Color(4) = 0.5;
+        res.hulls{i} = ch;
     end
 end
 
