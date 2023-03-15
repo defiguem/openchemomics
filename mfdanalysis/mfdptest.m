@@ -30,9 +30,9 @@ function [ptest_res] = mfdptest(mfda_res)
 % weighted effect coding in observational studies. International Journal of
 % Public Health, 62(1), 163‑167. https://doi.org/10.1007/s00038-016-0901-1
 %
-% de Figueiredo, M., Giannoukos, S., Rudaz, S., Zenobi, R., & Boccard, J. 
-% (s. d.). Efficiently handling high-dimensional data from multifactorial 
-% designs with unequal group sizes using Rebalanced ASCA (RASCA). 
+% de Figueiredo, M., Giannoukos, S., Rudaz, S., Zenobi, R., & Boccard, J.
+% (s. d.). Efficiently handling high-dimensional data from multifactorial
+% designs with unequal group sizes using Rebalanced ASCA (RASCA).
 % Journal of Chemometrics, n/a(n/a), e3401. https://doi.org/10.1002/cem.3401
 %
 % Input arguments :
@@ -127,7 +127,7 @@ switch Options.decomp
                         Xf(idx,:) = repmat(levmean, length(idx),1); % replicates the mean vector in the effect matrix
                     end
 
-                    % Removes the grand mean from the effect matrix 
+                    % Removes the grand mean from the effect matrix
                     Xf = Xf - Xm;
 
                     % Calculates the sum of squares
@@ -174,9 +174,13 @@ switch Options.decomp
             % Loops over the effects
             for i = 1 : length(effects)
 
+                X = mfda_res.X; % experimental data
+
                 if length(effects{i}) == 1 % main effects
 
-                    Y = mfda_res.Y; % extracts true design matrix
+                    % Retrieves true design and coded design
+                    Y = mfda_res.Y;
+
                     Yo = Y(:,1:end ~= i); % design matrix of other factors than i
                     Youni = unique(Yo,'rows'); % unique combinations of other factors
 
@@ -185,92 +189,25 @@ switch Options.decomp
                     for j = 1 : size(Youni)
                         idx = find( ismember(Yo,Youni(j,:),'rows') == 1 ); % finds position of each unique combination of other factors
                         perms  = randperm(length(idx)); % creates randomized indices for the length of idx
-                        Y(idx,i) = Y(idx(perms),i); % randomizes the design for factor i
+                        X(idx,:) = X(idx(perms),:); % performs the permutations here
                     end
 
-                    % Checks which coding is to be used to define the design matrices
-                    if strcmp(Options.coding,'sumcod') == 1
-
-                        % Sum coding of the input design matrix according to
-                        % Thiel et al. (2017)
-                        [cod, codempty] = sumcoding(Y, Options);
-
-                    elseif strcmp(Options.coding,'wecod') == 1
-
-                        % Weighted-effect coding of the input design matrix according
-                        % to Nieuwenhuis et al. (2017)
-                        [cod, codempty] = wecoding(Y, Options);
-
-                    end
-
-                    % Calculates the model parameters in B
-                    codcat = cat(2,cod{:});
-                    Bmat = (pinv(codcat' * codcat) * codcat' * X)';
-
-                    % Creates empty B and separates Bmat in array of cells (it is just useful for later calculations...)
-                    bempty = {};
-                    B = {};
-                    for j = 1 : length(cod)
-                        B{j} = Bmat(:,size(cat(2,cod{1:j-1}),2) + 1 : size(cat(2,cod{1:j}),2));
-                        bempty{j} = zeros(p,size(cod{j},2));
-                    end
-
-                    % Calculates residuals of the full model
-                    Xe = X - (cat(2,cod{:}) * Bmat');
-
-                    % Calculates the residuals of the model without effect i
-                    Xftmp = cod; Xftmp{i+1} = zeros(size(cod{i+1}));
-                    Bf = B; Bf{i+1} = zeros(size(B{i+1}));
-                    Ef = X - (cat(2,Xftmp{:}) * cat(2,Bf{:})');
-
-                    % Calculates the sum of squares according to 
-                    % Thiel et al. (2017)
-                    ptest_res.ssq(k,i) = sum(Ef(:).^2) - sum(Xe(:).^2);
 
                 else
 
-                    Y = mfda_res.Y;
+                    X = X(randperm(n),:); % performs the permutations here
 
-                    % Checks which coding is to be used to define the design
-                    % matrices
-                    if strcmp(Options.coding,'sumcod') == 1
-                        [cod, codempty] = sumcoding(Y, Options); % sum coding of the input design matrix according to Thiel et al. (2017)
-                    elseif strcmp(Options.coding,'wecod') == 1
-                        [cod, codempty] = wecoding(Y, Options);  % weighted effect coding of the input design matrix according to te Grotenhuis et al. (2017)
-                    else
-                        error('The coding option defined does not exist or is not supported!');
-                    end
+                end
 
-                    % Random permutations of the coded effect
-                    perms = randperm(n);
-                    cod{i+1} = cod{i+1}(perms,:); % adds one to consider grand mean
+                    cod = mfda_res.cod;
 
-                    % Calculates the model parameters in B
+                    % Calculates the true model parameters in B
                     codcat = cat(2,cod{:});
                     Bmat = (pinv(codcat' * codcat) * codcat' * X)';
 
-                    % Creates empty B and separates Bmat in array of cells (it is just useful for later calculations...)
-                    bempty = {};
-                    B = {};
-                    for j = 1 : length(cod)
-                        B{j} = Bmat(:,size(cat(2,cod{1:j-1}),2) + 1 : size(cat(2,cod{1:j}),2));
-                        bempty{j} = zeros(p,size(cod{j},2));
-                    end
-
-                    % Calculates residuals of the full model
-                    Xe = X - (cat(2,cod{:}) * Bmat');
-
-                    % Calculates the residuals of the model without effect i
-                    Xftmp = cod; Xftmp{i+1} = zeros(size(cod{i+1}));
-                    Bf = B; Bf{i+1} = zeros(size(B{i+1}));
-                    Ef = X - (cat(2,Xftmp{:}) * cat(2,Bf{:})');
-
-                    % Calculates the sum of squares according to 
-                    % Thiel et al. (2017)
-                    ptest_res.ssq(k,i) = sum(Ef(:).^2) - sum(Xe(:).^2);
-
-
-                end
+                    % Calculates the sum of squares
+                    tmp = cod{i+1} * Bmat(:,size(cat(2,cod{1:i}),2) + 1 : size(cat(2,cod{1:i+1}),2))';
+                    ptest_res.ssq(k,i) = sum(tmp(:).^2);
 
             end
 
@@ -287,7 +224,9 @@ switch Options.decomp
 
                 if length(effects{i}) == 1 % main effects
 
-                    Y = mfda_res.Y; % extracts true design matrix
+                    % Retrieves true design and coded design
+                    Y = mfda_res.Y;
+
                     Yo = Y(:,1:end ~= i); % design matrix of other factors than i
                     Youni = unique(Yo,'rows'); % unique combinations of other factors
 
@@ -296,115 +235,43 @@ switch Options.decomp
                     for j = 1 : size(Youni)
                         idx = find( ismember(Yo,Youni(j,:),'rows') == 1 ); % finds position of each unique combination of other factors
                         perms  = randperm(length(idx)); % creates randomized indices for the length of idx
-                        Y(idx,i) = Y(idx(perms),i); % randomizes the design for factor i
+                        Y(idx,:) = Y(idx(perms),:); % performs the permutations here
                     end
-
-                    % Coding of the design based on the permuted main effects
-                    if strcmp(Options.coding,'sumcod') == 1
-
-                        % Sum coding of the input design matrix according to
-                        % Thiel et al. (2017)
-                        [cod, codempty] = sumcoding(Y, Options);
-
-                    elseif strcmp(Options.coding,'wecod') == 1
-
-                        % Weighted-effect coding of the input design matrix according
-                        % to Nieuwenhuis et al. (2017)
-                        [cod, codempty] = wecoding(Y, Options);
-
-                    end
-
-                    % Coding of the rebalanced design based on the permuted 
-                    % main effects
-                    Options.decomp = 'glm';
-                    [radecomp_res, Xbal, Ybal] = radecomp(X, Y, Options);
-                    codbal = radecomp_res.cod;
-
-                    % Calculates the model parameters in B (calibration)
-                    codcat = cat(2,codbal{:});
-                    Bmat = (pinv(codcat' * codcat) * codcat' * Xbal)';
-
-                    % Creates empty B and separates Bmat in array of cells (it is just useful for later calculations...)
-                    bempty = {};
-                    B = {};
-                    for j = 1 : length(cod)
-                        B{j} = Bmat(:,size(cat(2,cod{1:j-1}),2) + 1 : size(cat(2,cod{1:j}),2));
-                        bempty{j} = zeros(p,size(cod{j},2));
-                    end
-
-                    % Calculates residuals of the full model
-                    Xe = X - (cat(2,cod{:}) * Bmat');
-
-                    % Calculates the residuals of the model without effect i
-                    % using the coding of the initial design and the B from
-                    % the rebalanced design
-                    Xftmp = cod; Xftmp{i+1} = zeros(size(cod{i+1}));
-                    Bf = B; Bf{i+1} = zeros(size(B{i+1}));
-                    Ef = X - (cat(2,Xftmp{:}) * cat(2,Bf{:})');
-
-                    % Calculates the sum of squares according to 
-                    % Thiel et al. (2017)
-                    ptest_res.ssq(k,i) = sum(Ef(:).^2) - sum(Xe(:).^2);
 
                 else
 
-                    Y = mfda_res.Y;
-
-                    % Checks which coding is to be used to define the design
-                    % matrices
-                    if strcmp(Options.coding,'sumcod') == 1
-                        [cod, codempty] = sumcoding(Y, Options); % sum coding of the input design matrix according to Thiel et al. (2017)
-                    elseif strcmp(Options.coding,'wecod') == 1
-                        [cod, codempty] = wecoding(Y, Options);  % weighted effect coding of the input design matrix according to te Grotenhuis et al. (2017)
-                    else
-                        error('The coding option defined does not exist or is not supported!');
-                    end
-
-                    % Coding of the rebalanced design based on the permuted 
-                    % main effects
-                    Options.decomp = 'glm';
-                    [radecomp_res, Xbal, Ybal] = radecomp(X, Y, Options);
-                    codbal = radecomp_res.cod;
-                    perms = randperm(size(Xbal,1));
-                    codbal{i+1} = codbal{i+1}(perms,:); % adds one to consider grand mean
-
-                    % Calculates the model parameters in B
-                    codcat = cat(2,codbal{:});
-                    Bmat = (pinv(codcat' * codcat) * codcat' * Xbal)';
-
-                    % Creates empty B and separates Bmat in array of cells (it is just useful for later calculations...)
-                    bempty = {};
-                    B = {};
-                    for j = 1 : length(cod)
-                        B{j} = Bmat(:,size(cat(2,cod{1:j-1}),2) + 1 : size(cat(2,cod{1:j}),2));
-                        bempty{j} = zeros(p,size(cod{j},2));
-                    end
-
-                    perms = randperm(n);
-                    cod{i+1} = cod{i+1}(perms,:); % adds one to consider grand mean
-
-                    % Calculates residuals of the full model
-                    Xe = X - (cat(2,cod{:}) * Bmat');
-
-                    % Calculates the residuals of the model without effect i
-                    % using the coding of the initial design and the B from
-                    % the rebalanced design
-                    Xftmp = cod; Xftmp{i+1} = zeros(size(cod{i+1}));
-                    Bf = B; Bf{i+1} = zeros(size(B{i+1}));
-                    Ef = X - (cat(2,Xftmp{:}) * cat(2,Bf{:})');
-
-                    % Calculates the sum of squares according to 
-                    % Thiel et al. (2017)
-                    ptest_res.ssq(k,i) = sum(Ef(:).^2) - sum(Xe(:).^2);
-
+                    Y = Y(randperm(n),:); % performs the permutations here
 
                 end
+
+                % Rebalances the design
+                [adecomp_res] = radecomp(mfda_res.X, Y, Options); % see radecomp.m for information
+
+                Ys = adecomp_res.Y(:,adecomp_res.effects{i});
+
+                Ysm{1,1} = unique(Ys,'rows');
+
+                for j = 1 : size(Ysm{1},1)
+
+                    [~,idx] = ismember(Ys,Ysm{1}(j,:), 'rows');
+                    Ysm{1,2}(j,:) = mean(adecomp_res.Xf{i}(idx == 1, :),1);
+
+                end
+
+                Xf = zeros(size(X));
+                for j = 1 : size(Ysm{1},1)
+                    idx = ismember(Y(:, unique(adecomp_res.effects{i})), Ysm{1}(j,:),'rows');
+                    Xf(idx,:) = repmat(Ysm{2}(j,:),[sum(idx==1),1]);
+                end
+
+                % Calculates the sum of squares
+                ptest_res.ssq(k,i) = sum(Xf(:).^2);
 
             end
 
         end
-end
 
+end
 
 % Retrieves the true/un-randomized ssq values
 ptest_res.tssq = mfda_res.ssq; % true/un-randomized ssq values (cells 1 and 2 contain ssq of initial matrix X and grand mean)
