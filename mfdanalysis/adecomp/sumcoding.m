@@ -59,7 +59,7 @@ for i = 1 : q
 end
 
 % Sum coding for interactions only if Options.interactions >= 2
-if Options.interactions >= 2
+if Options.interactions >= 2 && size(Y,2) >= Options.interactions
     
     % Defines interactions matrix according to Options.interactions
     % combs contains all possible interactions according to Options.interactions

@@ -127,7 +127,12 @@ switch ytarget
             
         elseif strcmp(yin,'intvec')
             
-            Yout=zeros(size(Yin,1), max(Yin)); 
+            if max(Yin) == 1
+                Yout=zeros(size(Yin,1), 2); 
+            else
+                Yout=zeros(size(Yin,1), max(Yin));
+            end
+
             Yout(sub2ind(size(Yout),1:numel(Yin),Yin'))=1;
             
         elseif strcmp(yin,'pmones')

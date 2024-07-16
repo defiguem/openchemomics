@@ -28,9 +28,9 @@ function [mkr] = distmkr(n)
 % =========================================================================
 
 mkrs = {'o'; ... % Circle
-    'diamond'; ... % Diamond
-    '^'; ... % Upward-pointing triangle
     'square'; ... % Square
+    '^'; ... % Upward-pointing triangle
+    'diamond'; ... % Diamond
     'pentagram'; ... % Five-pointed star (pentagram)
     'hexagram'; ... % Six-pointed star (hexagram)
     'v'; ... % Downward-pointing triangle

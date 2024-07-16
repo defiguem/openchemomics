@@ -41,7 +41,12 @@ elseif istable(labels)==1
 end
 
 % Identifies unique labels in the input
-uni = unique(labels);
+if isa(labels,'double')
+    uni = unique(labels);
+else
+    uni = unique(labels,'stable');
+end
+
 
 % Sorts unique labels in alpha-numerical order
 if isstring(labels) == 1 && sum(isnan(str2double(uni))) == 0
