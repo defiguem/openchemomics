@@ -104,7 +104,7 @@ end
 % This is the first step towards balancing the design.
 
 % Identifies the highest number of replicates
-maxrep = max(cellfun(@(x) length(x), Yrep));
+maxrep = max(cellfun(@(x) max(x), Yrep));
 refrep = (1 : maxrep)'; % reference vector for the replicates
 
 % Loops over each table
@@ -147,6 +147,18 @@ end
 
 for i = 1 : length(Y)
     Ys{i} = Yall;
+end
+
+%%  Finds the rows missing in all tables
+
+idx = find(sum(nans,2) == size(nans,2));
+if isempty(idx) == 0
+    for i = 1 : ntab
+        Xs{i}(idx,:) = [];
+        Ys{i}(idx,:) = [];
+    end
+
+    Yall(idx,:) = [];
 end
 
 %% Balances the design
